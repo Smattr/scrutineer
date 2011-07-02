@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <string.h>
+#include <ctype.h>
 
 #define DEFAULT_CLEAN_TARGET "clean"
 
@@ -100,8 +101,42 @@ int main(int argc, char **argv) {
     char *args[3];
     char *clean_args[3];
     int marker;
+    int c;
 
-    /* TODO: Some magic to set components and targets from cmdline. */
+    /* Parse the command line arguments. */
+    while ((c = getopt(argc, argv, "t:c:")) != -1) {
+        switch (c) {
+            case 't': { /* target */
+                list_t *temp;
+                temp = (list_t*) malloc(sizeof(list_t));
+                temp->value = optarg;
+                if (targets) { /* List has existing elements. */
+                    temp->next = targets;
+                } else {
+                    temp->next = NULL;
+                }
+                targets = temp;
+                break;
+            } case 'c': { /* component */
+                list_t *temp; /* FIXME: Duplicate code == yuck ? */
+                temp = (list_t*) malloc(sizeof(list_t));
+                temp->value = optarg;
+                if (components) { /* List has existing elements. */
+                    temp->next = components;
+                } else {
+                    temp->next = NULL;
+                }
+                components = temp;
+                break;
+            } case '?': { /* Unknown option. */
+                fprintf(stderr, "Unknown option %c.\n", c);
+                return -1;
+            } default: { /* getopt failure */
+                assert(0); /* FIXME: More sensible failure? */
+                return -1;
+            }
+        }
+    }
 
     /* Setup clean arguments. */
     /* TODO: Parameterise make so you can use a different build system. */
