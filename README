@@ -1,0 +1,22 @@
+A Makefile validator.
+
+This is a work in progress and not fully functional. This line will be removed
+when this is no longer the case.
+
+All code and supporting files in this repository are licensed under a CC BY-SA
+3.0 licence (http://creativecommons.org/licenses/by-sa/3.0/). You can modify or
+reuse any part of this project for any purpose (including commercial) provided
+you retain this licence and attribution to the original author, Matthew
+Fernandez <matthew.fernandez@gmail.com>.
+
+Scenario: You built a nice simple project. It was straightforward, it worked,
+everyone agreed it was cute. Flash forward several time periods and your
+project has become large, accompanied by an unwieldy Makefile with hacks so
+obtuse that mothers advise their children not to look directly at it for fear
+of being blinded.
+
+The Makefile works, or at least you think it does, but how can you be sure?
+Enter scrutineer. Scrutineer repeatedly executes your Makefile and explicitly
+lists the dependency structure it finds. Comparing the output to your own
+intuition of what the Makefile should be doing helps expose where the problems
+in your Makefile are.
