@@ -14,6 +14,7 @@
 typedef struct list {
     char *value;
     struct list *next;
+    int phony; /* Whether this target is .PHONY or not. */
 } list_t;
 
 /* A list of potential dependencies for each target. */
@@ -97,10 +98,12 @@ int main(int argc, char **argv) {
     const char *clean = DEFAULT_CLEAN_TARGET;
     char *args[2];
     char *clean_args[2];
+    int marker;
 
     /* TODO: Some magic to set components and targets from cmdline. */
 
     /* Setup clean arguments. */
+    /* TODO: Parameterise make so you can use a different build system. */
     clean_args[0] = (char*) malloc(sizeof(char) * strlen("make") + 1);
     strcpy(clean_args[0], "make");
     clean_args[1] = clean;
@@ -130,12 +133,14 @@ int main(int argc, char **argv) {
         assert(p->value);
         args[1] = p->value;
         if (run(args)) {
-            fprintf(stderr, "Warning: Failed to build %s.\n", p->value);
+            fprintf(stderr, "Warning: Failed to build %s from scratch. Broken %s recipe?\n", p->value, p->value);
             continue;
         }
 
+        assert(!p->phony); /* We shouldn't know whether this target is phony yet. */
         if (!exists(p->value)) {
             fprintf(stderr, "Warning: PHONY target %s! I can't assess this.\n", p->value);
+            p->phony = 1;
             continue;
         }
 
@@ -154,19 +159,40 @@ int main(int argc, char **argv) {
         }
 
         printf("%s:", p->value);
+        old = now;
+        now = get_now(now);
         for (p1 = components; p1; p1 = p1->next) {
-            old = now;
-            now = get_now(now);
             assert(p1->value);
+            assert(now > old);
             touch(p1->value, now);
             if (run(args)) {
                 fprintf(stderr, "Warning: Failed to build %s after touching %s.\n", p->value, p1->value);
                 continue;
             }
-            /* TODO: Check exists and mtime. */
-
-
+            if (!exists(p->value)) {
+                fprintf(stderr, "Warning: %s, that was NOT a phony target, was removed when building after touching %s. Broken recipe for %s?\n", p->value, p1->value, p->value);
+                break;
+            }
+            if (get_mtime(p->value) != old) {
+                /* The target was rebuilt. */
+                printf(" %s", p1->value);
+            }
+        }
+        printf("\n\n");
     }
+
+    /* TODO: Command line option to disable outputting the phony rule. */
+    for (marker = 0, p = targets; p; p = p->next) {
+        if (p->phony) {
+            if (!marker) {
+                printf(".PHONY:");
+                marker = 1;
+            }
+            printf(" %s", p->value);
+        }
+    }
+    /* If we found at least one phony target. */
+    if (marker) printf("\n");
 
     return 0;
 }
