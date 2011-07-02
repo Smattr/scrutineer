@@ -162,6 +162,21 @@ int main(int argc, char **argv) {
             }
         }
 
+        /* Touch the target to make sure it is considered up to date with
+         * respect to all the potential dependencies. Note, this is here
+         * because the target, if not phony, may not actually be in the
+         * user-provided list of components.
+         */
+        if (exists(p->value)) {
+            if (touch(p->value, now)) {
+                fprintf(stderr, "Could not update timestamp for %s (cannot determine dependencies).\n", p->value);
+                continue;
+            }
+        }
+
+        /* The target should not be phony if we've reached this point. */
+        assert(!p->phony);
+
         printf("%s:", p->value);
         old = now;
         now = get_now(now);
