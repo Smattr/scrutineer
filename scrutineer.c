@@ -150,15 +150,15 @@ int main(int argc, char **argv) {
 
         /* Touch every component so we have a known "clean" starting point. */
         now = get_now((time_t)0);
-        for (p = components; p; p = p->next) {
-            assert(p->value);
-            if (exists(p->value)) {
-                if (touch(p->value, now)) {
-                    fprintf(stderr, "Could not update timestamp for %s.\n", p->value);
+        for (p1 = components; p1; p1 = p1->next) {
+            assert(p1->value);
+            if (exists(p1->value)) {
+                if (touch(p1->value, now)) {
+                    fprintf(stderr, "Could not update timestamp for %s.\n", p1->value);
                     return -1;
                 }
             } else if (errno != ENOENT) {
-                fprintf(stderr, "Could not determine access rights for %s.\n", p->value);
+                fprintf(stderr, "Could not determine access rights for %s.\n", p1->value);
             }
         }
 
