@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <string.h>
 
 #define DEFAULT_CLEAN_TARGET "clean"
 
