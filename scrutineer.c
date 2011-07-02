@@ -96,8 +96,8 @@ int main(int argc, char **argv) {
     time_t now, old;
     list_t *p, *p1;
     const char *clean = DEFAULT_CLEAN_TARGET;
-    char *args[2];
-    char *clean_args[2];
+    char *args[3];
+    char *clean_args[3];
     int marker;
 
     /* TODO: Some magic to set components and targets from cmdline. */
@@ -108,11 +108,13 @@ int main(int argc, char **argv) {
     strcpy(clean_args[0], "make");
     clean_args[1] = clean;
     assert(strlen(clean) != 0);
+    clean_args[2] = NULL;
 
     /* Setup basic build arguments. */
     args[0] = clean_args[0]; /* Cheat and reuse this because we know both
                               * arrays will only ever be passed to const fns.
                               */
+    args[2] = NULL;
 
     /* Build each target multiple times (touching different files in between)
      * to determine dependencies. Note that the initial build of each target is
@@ -124,6 +126,7 @@ int main(int argc, char **argv) {
         /* Clean up from the last build (also don't assume the user has left
          * the build directory in a clean state when they executed scrutineer.
          */
+        assert(clean_args[2] == NULL);
         if (run(clean_args)) {
             fprintf(stderr, "Error: Clean failed.\n");
             return -1;
@@ -132,6 +135,7 @@ int main(int argc, char **argv) {
         /* First build to set the stage. */
         assert(p->value);
         args[1] = p->value;
+        assert(args[2] == NULL);
         if (run(args)) {
             fprintf(stderr, "Warning: Failed to build %s from scratch. Broken %s recipe?\n", p->value, p->value);
             continue;
