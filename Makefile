@@ -7,4 +7,4 @@ scrutineer: scrutineer.o
 	gcc ${CC_FLAGS} -o $@ -c $<
 
 clean:
-	rm *.o scrutineer
+	rm -f *.o scrutineer
