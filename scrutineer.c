@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
 
     /* Setup clean arguments. */
     /* TODO: Parameterise make so you can use a different build system. */
-    clean_args[0] = (char*) malloc(sizeof(char) * strlen("make") + 1);
+    clean_args[0] = (char*) malloc(sizeof(char) * (strlen("make") + 1));
     strcpy(clean_args[0], "make");
     clean_args[1] = (char*)clean; /* FIXME: Casting the const away here is yuck++. */
     assert(strlen(clean) != 0);
