@@ -20,3 +20,9 @@ Enter scrutineer. Scrutineer repeatedly executes your Makefile and explicitly
 lists the dependency structure it finds. Comparing the output to your own
 intuition of what the Makefile should be doing helps expose where the problems
 in your Makefile are.
+
+A note to hackers: while exploring/using this project you may find yourself
+wondering, if there is a tool to validate your existing Makefile, is it
+possible to create a tool that builds your Makefile from scratch without the
+error prone process of writing it yourself. Such a thing is indeed possible,
+but is left as an exercise to the reader...
