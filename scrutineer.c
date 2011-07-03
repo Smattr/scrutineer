@@ -75,6 +75,12 @@ int run(char *const argv[]) {
     proc = fork();
     if (proc == 0) {
         /* Child process. */
+
+        /* Supress our output. */
+        stdout = freopen("/dev/null", "w", stdout);
+        assert(stdout);
+        stderr = freopen("/dev/null", "w", stderr);
+        assert(stderr);
         execvp(argv[0], argv);
         /* If we reach this point execvp failed. */
         return errno;
