@@ -153,6 +153,14 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (!targets) {
+        die("No targets provided.");
+    }
+
+    if (!components) {
+        die("No components provided.");
+    }
+
     /* Setup clean arguments. */
     /* TODO: Parameterise make so you can use a different build system. */
     clean_args[0] = (char*) malloc(sizeof(char) * strlen("make") + 1);
