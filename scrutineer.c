@@ -11,6 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 
+/* Helper macro for bailing in the case of an unrecoverable error. */
 #define DIE(...) \
     do { \
         fprintf(stderr, __VA_ARGS__); \
@@ -24,12 +25,6 @@ typedef struct list {
     struct list *next;
     int phony; /* Whether this target is .PHONY or not. */
 } list_t;
-
-/* A list of potential dependencies for each target. */
-list_t *components = NULL;
-
-/* A list of targets to assess. */
-list_t *targets = NULL;
 
 /* Sets the modified time of a file. Returns 0 on success or -1 on failure.
  */
@@ -126,11 +121,17 @@ int main(int argc, char **argv) {
     const char *clean = DEFAULT_CLEAN_TARGET;
     char *args[3];
     char *clean_args[3];
-    int marker;
     int c;
+    int output_phony = 0;
+
+    /* A list of potential dependencies for each target. */
+    list_t *components = NULL;
+
+    /* A list of targets to assess. */
+    list_t *targets = NULL;
 
     /* Parse the command line arguments. */
-    while ((c = getopt(argc, argv, "t:c:")) != -1) {
+    while ((c = getopt(argc, argv, "t:c:ph")) != -1) {
         switch (c) {
             case 't': { /* target */
                 list_t *temp;
@@ -146,22 +147,33 @@ int main(int argc, char **argv) {
                 temp->next = components;
                 components = temp;
                 break;
+            } case 'h': { /* help */
+                printf("Usage: %s options\n"
+                    " -c component A file to consider as a potential dependency.\n"
+                    " -h           Print usage information and exit.\n"
+                    " -p           Include .PHONY target after assessing real ones.\n"
+                    " -t target    A Makefile target to assess.\n",
+                    argv[0]);
+                return 0;
+            } case 'p': { /* output PHONY rule. */
+                output_phony = 1;
+                break;
             } case '?': { /* Unknown option. */
                 DIE("Unknown option %c.\n", c);
                 break;
             } default: { /* getopt failure */
-                DIE("Failed to parse command line arguments.");
+                DIE("Failed to parse command line arguments.\n");
                 break;
             }
         }
     }
 
     if (!targets) {
-        DIE("No targets provided.");
+        DIE("No targets specified.\n");
     }
 
     if (!components) {
-        DIE("No components provided.");
+        DIE("No components specified.\n");
     }
 
     /* Setup clean arguments. */
@@ -181,7 +193,16 @@ int main(int argc, char **argv) {
     /* Initial clean. */
     assert(clean_args[2] == NULL);
     if (run(clean_args)) {
-        DIE("Error: Clean failed.");
+        DIE("Error: Clean failed.\n");
+    }
+
+    /* Check all the components we were passed actually exist. */
+    for (p1 = components; p1; p1 = p1->next) {
+        assert(p1->value);
+        if (not_exists(p1->value)) {
+            DIE("Component %s doesn't exist after cleaning. "
+                "Is it an intermediate file?\n", p1->value);
+        }
     }
 
     /* Build each target multiple times (touching different files in between)
@@ -206,69 +227,73 @@ int main(int argc, char **argv) {
         assert(!p->phony);
 
         if (not_exists(p->value)) {
-            fprintf(stderr, "Warning: PHONY target %s! I can't assess this.\n",
+            fprintf(stderr,
+                "Warning: %s appears to be PHONY! I can't assess this.\n",
                 p->value);
             p->phony = 1;
             continue;
         }
 
-        /* Touch every component so we have a known "clean" starting point. */
+        /* Touch every component so we have a known starting point. */
         now = get_now((time_t)0);
         for (p1 = components; p1; p1 = p1->next) {
             assert(p1->value);
             switch (not_exists(p1->value)) {
                 case 0: { /* Component exists. */
                     if (touch(p1->value, now)) {
-                        DIE("Could not update timestamp for %s.", p1->value);
+                        DIE("Could not update timestamp for %s.\n", p1->value);
                     }
                     break;
                 } case ENOENT: { /* Component doesn't exist. */
-                    fprintf(stderr, "Warning: component %s doesn't exist. Did you accidentally include an intermediate component?\n", p1->value);
-                    /* FIXME: This check should be done on all components after the first clean. */
+                    fprintf(stderr, "Warning: component %s now doesn't exist, "
+                        "although cleaning does not seem to delete it. "
+                        "Destructive recipe somewhere in your Makefile?\n",
+                        p1->value);
                     break;
                 } default: { /* Some other access issue. */
-                    DIE("Could not determine access rights for %s.", p1->value);
+                    DIE("Could not determine access rights for %s.\n", p1->value);
                 }
             }
         }
 
         /* Touch the target to make sure it is considered up to date with
          * respect to all the potential dependencies. Note, this is here
-         * because the target, if not phony, may not actually be in the
-         * user-provided list of components.
+         * because the target may not actually be in the user-provided list of
+         * components.
          */
-        if (!not_exists(p->value)) {
-            if (touch(p->value, now)) {
-                fprintf(stderr, "Could not update timestamp for %s (cannot determine dependencies).\n", p->value);
-                continue;
-            }
+        assert(!not_exists(p->value));
+        if (touch(p->value, now)) {
+            fprintf(stderr, "Could not update timestamp for %s (cannot "
+                "determine dependencies).\n", p->value);
+            continue;
         }
 
         /* The target should not be phony if we've reached this point. */
         assert(!p->phony);
 
         printf("%s:", p->value);
-        //fflush(stdout);
-        old = now;
+        old = now; /* The timestamp we've marked each file with. */
         for (p1 = components; p1; p1 = p1->next) {
             now = get_now(old);
             assert(p1->value);
             assert(now > old);
+            assert(!not_exists(p1->value));
             assert(get_mtime(p->value) == old);
             touch(p1->value, now);
             if (run(args)) {
-                fprintf(stderr, "Warning: Failed to build %s after touching %s.\n", p->value, p1->value);
-                continue;
+                DIE("Error: Failed to build %s after touching %s.\n", p->value,
+                    p1->value);
             }
             if (not_exists(p->value)) {
-                fprintf(stderr, "Warning: %s, that was NOT a phony target, was removed when building after touching %s. Broken recipe for %s?\n", p->value, p1->value, p->value);
-                break;
+                DIE("Error: %s, that was NOT a phony target, was removed when "
+                    "building after touching %s. Broken recipe for %s?\n",
+                    p->value, p1->value, p->value);
             }
             now = get_mtime(p->value);
+            assert(now >= old); /* Check we haven't gone back in time. */
             if (now != old) {
                 /* The target was rebuilt. */
                 printf(" %s", p1->value);
-                //fflush(stdout);
                 old = now;
             }
         }
@@ -277,22 +302,25 @@ int main(int argc, char **argv) {
         /* Clean up. */
         assert(clean_args[2] == NULL);
         if (run(clean_args)) {
-            DIE("Error: Clean failed.");
+            DIE("Error: Clean failed.\n");
         }
     }
 
-    /* TODO: Command line option to disable outputting the phony rule. */
-    for (marker = 0, p = targets; p; p = p->next) {
-        if (p->phony) {
-            if (!marker) {
-                printf(".PHONY:");
-                marker = 1;
+    if (output_phony) {
+        int marker;
+
+        for (marker = 0, p = targets; p; p = p->next) {
+            if (p->phony) {
+                if (!marker) {
+                    printf(".PHONY:");
+                    marker = 1;
+                }
+                printf(" %s", p->value);
             }
-            printf(" %s", p->value);
         }
+        /* If we found at least one phony target. */
+        if (marker) printf("\n");
     }
-    /* If we found at least one phony target. */
-    if (marker) printf("\n");
 
     return 0;
 }

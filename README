@@ -1,8 +1,5 @@
 A Makefile validator.
 
-This is a work in progress and not fully functional. This line will be removed
-when this is no longer the case.
-
 All code and supporting files in this repository are licensed under a CC BY-SA
 3.0 licence (http://creativecommons.org/licenses/by-sa/3.0/). You can modify or
 reuse any part of this project for any purpose (including commercial) provided
@@ -21,8 +18,15 @@ lists the dependency structure it finds. Comparing the output to your own
 intuition of what the Makefile should be doing helps expose where the problems
 in your Makefile are.
 
+If you find any bugs with this code or would like a feature implemented, please
+email me at matthew.fernandez@gmail.com or create an issue on github. My current
+to-do list is:
+ - Allow customising the clean action;
+ - Allow customising the build command (instead of always make);
+ - Allow passing command line options to make.
+
 A note to hackers: while exploring/using this project you may find yourself
 wondering, if there is a tool to validate your existing Makefile, is it
 possible to create a tool that builds your Makefile from scratch without the
-error prone process of writing it yourself. Such a thing is indeed possible,
+error prone process of writing it yourself? Such a thing is indeed possible,
 but is left as an exercise to the reader...

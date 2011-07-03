@@ -1,4 +1,4 @@
-CC_FLAGS := -Wall
+CC_FLAGS := -Wall -Wextra
 
 scrutineer: scrutineer.o
 	gcc ${CC_FLAGS} -o $@ $<
