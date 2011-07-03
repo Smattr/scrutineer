@@ -11,14 +11,11 @@
 #include <string.h>
 #include <ctype.h>
 
-#ifdef __GNUC__
-    /* If we're using a GNU compiler there are some optimisation hints we can
-     * use.
-     */
-    #define NORETURN __attribute__((noreturn))
-#else
-    #define NORETURN /* Nothing */
-#endif
+#define DIE(...) \
+    do { \
+        fprintf(stderr, __VA_ARGS__); \
+        exit(1); \
+    } while (0)
 
 #define DEFAULT_CLEAN_TARGET "clean"
 
@@ -27,8 +24,6 @@ typedef struct list {
     struct list *next;
     int phony; /* Whether this target is .PHONY or not. */
 } list_t;
-
-void die(const char *message) NORETURN;
 
 /* A list of potential dependencies for each target. */
 list_t *components = NULL;
@@ -74,6 +69,12 @@ time_t get_now(time_t not) {
 int run(char *const argv[]) {
     pid_t proc;
 
+#ifndef NDEBUG
+    /* Check the arguments we're about to exec are NULL-terminated. */
+    int i = 0;
+    while (argv[i++]);
+#endif
+
     /* Without flushing stdout/stderr before forking, both parent and child
      * process inherit anything in the buffers and eventually end up flushing
      * (two copies of) it.
@@ -100,15 +101,13 @@ int run(char *const argv[]) {
         int status;
 
         switch (wait(&status)) {
-            case -1: {
-                /* Terminated by signal to me. */
-                return errno;
-                break;
-            } case 0: {
+            case -1:
+                /* Terminated by signal to me. Fall through. */
+            case 0: {
                 /* Status unavailable. */
                 return errno;
                 break;
-            } case proc: {
+            } default: {
                 /* wait returned proc; expected. */
                 return status;
                 break;
@@ -116,7 +115,6 @@ int run(char *const argv[]) {
         }
     } else {
         /* Fork failed. */
-        /* TODO: Do something here... */
         return errno;
     }
 }
@@ -142,39 +140,35 @@ int main(int argc, char **argv) {
                 targets = temp;
                 break;
             } case 'c': { /* component */
-                list_t *temp; /* FIXME: Duplicate code == yuck ? */
+                list_t *temp;
                 temp = (list_t*) malloc(sizeof(list_t));
                 temp->value = optarg;
                 temp->next = components;
                 components = temp;
                 break;
             } case '?': { /* Unknown option. */
-                char *message;
-
-                message = (char*) malloc(sizeof(char) * (strlen("Unknown option .") + 2));
-                sprintf(message, "Unknown option %c.", c);
-                die(message);
+                DIE("Unknown option %c.\n", c);
                 break;
             } default: { /* getopt failure */
-                assert(0); /* FIXME: More sensible failure? */
-                return -1;
+                DIE("Failed to parse command line arguments.");
+                break;
             }
         }
     }
 
     if (!targets) {
-        die("No targets provided.");
+        DIE("No targets provided.");
     }
 
     if (!components) {
-        die("No components provided.");
+        DIE("No components provided.");
     }
 
     /* Setup clean arguments. */
     /* TODO: Parameterise make so you can use a different build system. */
     clean_args[0] = (char*) malloc(sizeof(char) * (strlen("make") + 1));
     strcpy(clean_args[0], "make");
-    clean_args[1] = (char*)clean; /* FIXME: Casting the const away here is yuck++. */
+    clean_args[1] = (char*)clean;
     assert(strlen(clean) != 0);
     clean_args[2] = NULL;
 
@@ -184,6 +178,12 @@ int main(int argc, char **argv) {
                               */
     args[2] = NULL;
 
+    /* Initial clean. */
+    assert(clean_args[2] == NULL);
+    if (run(clean_args)) {
+        DIE("Error: Clean failed.");
+    }
+
     /* Build each target multiple times (touching different files in between)
      * to determine dependencies. Note that the initial build of each target is
      * discarded unless it fails because it tells us nothing about
@@ -191,26 +191,23 @@ int main(int argc, char **argv) {
      */
     for (p = targets; p; p = p->next) {
 
-        /* Clean up from the last build (also don't assume the user has left
-         * the build directory in a clean state when they executed scrutineer.
-         */
-        assert(clean_args[2] == NULL);
-        if (run(clean_args)) {
-            die("Error: Clean failed.");
-        }
-        
-        /* First build to set the stage. */
+        /* Initial build to set the stage. */
         assert(p->value);
         args[1] = (char*)p->value;
         assert(args[2] == NULL);
         if (run(args)) {
-            fprintf(stderr, "Warning: Failed to build %s from scratch. Broken %s recipe?\n", p->value, p->value);
+            fprintf(stderr,
+                "Warning: Failed to build %s from scratch. Broken %s recipe?\n",
+                p->value, p->value);
             continue;
         }
 
-        assert(!p->phony); /* We shouldn't know whether this target is phony yet. */
+        /* We shouldn't know whether this target is phony yet. */
+        assert(!p->phony);
+
         if (not_exists(p->value)) {
-            fprintf(stderr, "Warning: PHONY target %s! I can't assess this.\n", p->value);
+            fprintf(stderr, "Warning: PHONY target %s! I can't assess this.\n",
+                p->value);
             p->phony = 1;
             continue;
         }
@@ -222,11 +219,7 @@ int main(int argc, char **argv) {
             switch (not_exists(p1->value)) {
                 case 0: { /* Component exists. */
                     if (touch(p1->value, now)) {
-                        char *message;
-
-                        message = (char*) malloc(sizeof(char) * (strlen("Could not update timestamp for .") + strlen(p1->value) + 1));
-                        sprintf(message, "Could not update timestamp for %s.", p1->value);
-                        die(message);
+                        DIE("Could not update timestamp for %s.", p1->value);
                     }
                     break;
                 } case ENOENT: { /* Component doesn't exist. */
@@ -234,11 +227,7 @@ int main(int argc, char **argv) {
                     /* FIXME: This check should be done on all components after the first clean. */
                     break;
                 } default: { /* Some other access issue. */
-                    char *message;
-
-                    message = (char*) malloc(sizeof(char) * (strlen("Could not determine access rights for .") + strlen(p1->value) + 1));
-                    sprintf(message, "Could not determine access rights for %s.", p1->value);
-                    die(message);
+                    DIE("Could not determine access rights for %s.", p1->value);
                 }
             }
         }
@@ -284,6 +273,12 @@ int main(int argc, char **argv) {
             }
         }
         printf("\n\n");
+
+        /* Clean up. */
+        assert(clean_args[2] == NULL);
+        if (run(clean_args)) {
+            DIE("Error: Clean failed.");
+        }
     }
 
     /* TODO: Command line option to disable outputting the phony rule. */
@@ -300,10 +295,4 @@ int main(int argc, char **argv) {
     if (marker) printf("\n");
 
     return 0;
-}
-
-void die(const char *message) {
-    assert(message);
-    fprintf(stderr, "%s\n", message);
-    exit(1);
 }
