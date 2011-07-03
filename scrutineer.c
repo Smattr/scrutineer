@@ -127,22 +127,14 @@ int main(int argc, char **argv) {
                 list_t *temp;
                 temp = (list_t*) malloc(sizeof(list_t));
                 temp->value = optarg;
-                if (targets) { /* List has existing elements. */
-                    temp->next = targets;
-                } else {
-                    temp->next = NULL;
-                }
+                temp->next = targets;
                 targets = temp;
                 break;
             } case 'c': { /* component */
                 list_t *temp; /* FIXME: Duplicate code == yuck ? */
                 temp = (list_t*) malloc(sizeof(list_t));
                 temp->value = optarg;
-                if (components) { /* List has existing elements. */
-                    temp->next = components;
-                } else {
-                    temp->next = NULL;
-                }
+                temp->next = components;
                 components = temp;
                 break;
             } case '?': { /* Unknown option. */
