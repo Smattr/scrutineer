@@ -11,6 +11,15 @@
 #include <string.h>
 #include <ctype.h>
 
+#ifdef __GNUC__
+    /* If we're using a GNU compiler there are some optimisation hints we can
+     * use.
+     */
+    #define NORETURN __attribute__((noreturn))
+#else
+    #define NORETURN /* Nothing */
+#endif
+
 #define DEFAULT_CLEAN_TARGET "clean"
 
 typedef struct list {
@@ -18,6 +27,8 @@ typedef struct list {
     struct list *next;
     int phony; /* Whether this target is .PHONY or not. */
 } list_t;
+
+void die(const char *message) NORETURN;
 
 /* A list of potential dependencies for each target. */
 list_t *components = NULL;
@@ -129,8 +140,12 @@ int main(int argc, char **argv) {
                 components = temp;
                 break;
             } case '?': { /* Unknown option. */
-                fprintf(stderr, "Unknown option %c.\n", c);
-                return -1;
+                char *message;
+
+                message = (char*) malloc(sizeof(char) * (strlen("Unknown option .") + 2));
+                sprintf(message, "Unknown option %c.", c);
+                die(message);
+                break;
             } default: { /* getopt failure */
                 assert(0); /* FIXME: More sensible failure? */
                 return -1;
@@ -164,8 +179,7 @@ int main(int argc, char **argv) {
          */
         assert(clean_args[2] == NULL);
         if (run(clean_args)) {
-            fprintf(stderr, "Error: Clean failed.\n");
-            return -1;
+            die("Error: Clean failed.");
         }
         
         /* First build to set the stage. */
@@ -190,11 +204,18 @@ int main(int argc, char **argv) {
             assert(p1->value);
             if (exists(p1->value)) {
                 if (touch(p1->value, now)) {
-                    fprintf(stderr, "Could not update timestamp for %s.\n", p1->value);
-                    return -1;
+                    char *message;
+
+                    message = (char*) malloc(sizeof(char) * (strlen("Could not update timestamp for .") + strlen(p1->value) + 1));
+                    sprintf(message, "Could not update timestamp for %s.", p1->value);
+                    die(message);
                 }
             } else if (errno != ENOENT) {
-                fprintf(stderr, "Could not determine access rights for %s.\n", p1->value);
+                char *message;
+
+                message = (char*) malloc(sizeof(char) * (strlen("Could not determine access rights for .") + strlen(p1->value) + 1));
+                sprintf(message, "Could not determine access rights for %s.", p1->value);
+                die(message);
             }
         }
 
@@ -250,4 +271,10 @@ int main(int argc, char **argv) {
     if (marker) printf("\n");
 
     return 0;
+}
+
+void die(const char *message) {
+    assert(message);
+    fprintf(stderr, "%s\n", message);
+    exit(1);
 }
