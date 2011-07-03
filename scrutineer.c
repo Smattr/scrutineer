@@ -72,6 +72,13 @@ time_t get_now(time_t not) {
 int run(char *const argv[]) {
     pid_t proc;
 
+    /* Without flushing stdout/stderr before forking, both parent and child
+     * process inherit anything in the buffers and eventually end up flushing
+     * (two copies of) it.
+     */
+    fflush(stdout);
+    fflush(stderr);
+
     proc = fork();
     if (proc == 0) {
         /* Child process. */
