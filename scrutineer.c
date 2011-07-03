@@ -23,7 +23,7 @@
 #define DEFAULT_CLEAN_TARGET "clean"
 
 typedef struct list {
-    char *value;
+    const char *value;
     struct list *next;
     int phony; /* Whether this target is .PHONY or not. */
 } list_t;
@@ -39,7 +39,7 @@ list_t *targets = NULL;
 /* Sets the modified time of a file. Returns 0 on success or -1 on failure.
  */
 int touch(const char *path, const time_t timestamp) {
-    struct utimbuf t = {
+    const struct utimbuf t = {
         .actime = timestamp,
         .modtime = timestamp,
     };
@@ -48,12 +48,14 @@ int touch(const char *path, const time_t timestamp) {
 
 time_t get_mtime(const char *path) {
     struct stat buf;
-    stat(path, &buf); /* TODO: Check the return code of stat. */
-    return buf.st_mtime;
+    int ret;
+
+    ret = stat(path, &buf);
+    return ret ? (time_t)0 : buf.st_mtime;
 }
 
-inline int exists(const char *path) {
-    return !access(path, F_OK);
+inline int not_exists(const char *path) {
+    return access(path, F_OK) ? errno : 0;
 }
 
 /* Returns a time approximating now that is not the value not. The idea behind
@@ -68,7 +70,7 @@ time_t get_now(time_t not) {
     return ret;
 }
 
-/* Run the given command and return the return code. */
+/* Run the given command and return the exit code. */
 int run(char *const argv[]) {
     pid_t proc;
 
@@ -88,9 +90,11 @@ int run(char *const argv[]) {
         assert(stdout);
         stderr = freopen("/dev/null", "w", stderr);
         assert(stderr);
+
         execvp(argv[0], argv);
+
         /* If we reach this point execvp failed. */
-        return errno;
+        exit(1);
     } else if (proc > 0) {
         /* Parent process. */
         int status;
@@ -104,7 +108,7 @@ int run(char *const argv[]) {
                 /* Status unavailable. */
                 return errno;
                 break;
-            } default: {
+            } case proc: {
                 /* wait returned proc; expected. */
                 return status;
                 break;
@@ -197,7 +201,7 @@ int main(int argc, char **argv) {
         
         /* First build to set the stage. */
         assert(p->value);
-        args[1] = p->value;
+        args[1] = (char*)p->value;
         assert(args[2] == NULL);
         if (run(args)) {
             fprintf(stderr, "Warning: Failed to build %s from scratch. Broken %s recipe?\n", p->value, p->value);
@@ -205,7 +209,7 @@ int main(int argc, char **argv) {
         }
 
         assert(!p->phony); /* We shouldn't know whether this target is phony yet. */
-        if (!exists(p->value)) {
+        if (not_exists(p->value)) {
             fprintf(stderr, "Warning: PHONY target %s! I can't assess this.\n", p->value);
             p->phony = 1;
             continue;
@@ -215,20 +219,27 @@ int main(int argc, char **argv) {
         now = get_now((time_t)0);
         for (p1 = components; p1; p1 = p1->next) {
             assert(p1->value);
-            if (exists(p1->value)) {
-                if (touch(p1->value, now)) {
+            switch (not_exists(p1->value)) {
+                case 0: { /* Component exists. */
+                    if (touch(p1->value, now)) {
+                        char *message;
+
+                        message = (char*) malloc(sizeof(char) * (strlen("Could not update timestamp for .") + strlen(p1->value) + 1));
+                        sprintf(message, "Could not update timestamp for %s.", p1->value);
+                        die(message);
+                    }
+                    break;
+                } case ENOENT: { /* Component doesn't exist. */
+                    fprintf(stderr, "Warning: component %s doesn't exist. Did you accidentally include an intermediate component?\n", p1->value);
+                    /* FIXME: This check should be done on all components after the first clean. */
+                    break;
+                } default: { /* Some other access issue. */
                     char *message;
 
-                    message = (char*) malloc(sizeof(char) * (strlen("Could not update timestamp for .") + strlen(p1->value) + 1));
-                    sprintf(message, "Could not update timestamp for %s.", p1->value);
+                    message = (char*) malloc(sizeof(char) * (strlen("Could not determine access rights for .") + strlen(p1->value) + 1));
+                    sprintf(message, "Could not determine access rights for %s.", p1->value);
                     die(message);
                 }
-            } else if (errno != ENOENT) {
-                char *message;
-
-                message = (char*) malloc(sizeof(char) * (strlen("Could not determine access rights for .") + strlen(p1->value) + 1));
-                sprintf(message, "Could not determine access rights for %s.", p1->value);
-                die(message);
             }
         }
 
@@ -237,7 +248,7 @@ int main(int argc, char **argv) {
          * because the target, if not phony, may not actually be in the
          * user-provided list of components.
          */
-        if (exists(p->value)) {
+        if (!not_exists(p->value)) {
             if (touch(p->value, now)) {
                 fprintf(stderr, "Could not update timestamp for %s (cannot determine dependencies).\n", p->value);
                 continue;
@@ -248,23 +259,28 @@ int main(int argc, char **argv) {
         assert(!p->phony);
 
         printf("%s:", p->value);
+        //fflush(stdout);
         old = now;
-        now = get_now(now);
         for (p1 = components; p1; p1 = p1->next) {
+            now = get_now(old);
             assert(p1->value);
             assert(now > old);
+            assert(get_mtime(p->value) == old);
             touch(p1->value, now);
             if (run(args)) {
                 fprintf(stderr, "Warning: Failed to build %s after touching %s.\n", p->value, p1->value);
                 continue;
             }
-            if (!exists(p->value)) {
+            if (not_exists(p->value)) {
                 fprintf(stderr, "Warning: %s, that was NOT a phony target, was removed when building after touching %s. Broken recipe for %s?\n", p->value, p1->value, p->value);
                 break;
             }
-            if (get_mtime(p->value) != old) {
+            now = get_mtime(p->value);
+            if (now != old) {
                 /* The target was rebuilt. */
                 printf(" %s", p1->value);
+                //fflush(stdout);
+                old = now;
             }
         }
         printf("\n\n");
