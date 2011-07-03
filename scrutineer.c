@@ -1,3 +1,11 @@
+/* scrutineer, a Makefile validator.
+ *
+ * Run `scrutineer -h` for usage information.
+ *
+ * This code is licensed under a CC BY-SA 3.0 licence. For more information see
+ * the accompanying README.
+ * Matthew Fernandez.
+ */
 #include <utime.h>
 #include <time.h>
 #include <assert.h>
@@ -297,7 +305,7 @@ int main(int argc, char **argv) {
                 old = now;
             }
         }
-        printf("\n\n");
+        printf("\n");
 
         /* Clean up. */
         assert(clean_args[2] == NULL);
