@@ -94,6 +94,8 @@ int run(char *const argv[]) {
         assert(stdout);
         stderr = freopen("/dev/null", "w", stderr);
         assert(stderr);
+        stdin = freopen("/dev/null", "r", stdin);
+        assert(stdin);
 
         execvp(argv[0], argv);
 
