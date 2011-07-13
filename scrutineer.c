@@ -26,7 +26,7 @@
         exit(1); \
     } while (0)
 
-#define DEFAULT_CLEAN_TARGET "clean"
+#define DEFAULT_CLEAN "make clean"
 
 typedef struct list {
     const char *value;
@@ -44,6 +44,7 @@ int touch(const char *path, const time_t timestamp) {
     return utime(path, &t);
 }
 
+/* Returns the modified time of a file. */
 time_t get_mtime(const char *path) {
     struct stat buf;
     int ret;
@@ -52,8 +53,49 @@ time_t get_mtime(const char *path) {
     return ret ? (time_t)0 : buf.st_mtime;
 }
 
+/* Returns 1 if a file does not exist and 0 otherwise. */
 inline int not_exists(const char *path) {
     return access(path, F_OK) ? errno : 0;
+}
+
+/* Split a string into an array of words terminated by a null entry.
+ * TODO: Cope with quoted strings as words.
+ */
+char **split(const char *s) {
+    unsigned int i, j;
+    char **parts = NULL;
+    unsigned int sz = 0;
+
+    for (i = 0, j = 0; s[i] != '\0'; ++i) {
+
+        /* Find the next space or end of string. */
+        for (j = i; s[j] != '\0' && s[j] != ' '; ++j);
+
+        if (i != j) {
+            /* Only add this item if we've found something more than a single
+             * space.
+             */
+            parts = (char**)realloc(parts, sizeof(char**) * (sz + 1));
+            parts[sz] = (char*)malloc(sizeof(char) * (j - i + 1));
+            strncpy(parts[sz], s + i, j - i);
+            parts[sz][j - i] = '\0';
+            ++sz;
+        }
+
+        /* If we're at the end of the string setting i=j will cause a buffer
+         * overflow in the next iteration of the loop.
+         */
+        if (s[j] == '\0') break;
+
+        /* Jump the word we've just extracted. */
+        i = j;
+    }
+
+    /* Append NULL. */
+    parts = (char**)realloc(parts, sizeof(char**) * (sz + 1));
+    parts[sz] = NULL;
+
+    return parts;
 }
 
 /* Returns a time approximating now that is not the value not. The idea behind
@@ -97,7 +139,7 @@ int run(char *const argv[]) {
         stdin = freopen("/dev/null", "r", stdin);
         assert(stdin);
 
-        execvp(argv[0], argv);
+        (void)execvp(argv[0], argv);
 
         /* If we reach this point execvp failed. */
         exit(1);
@@ -128,38 +170,43 @@ int run(char *const argv[]) {
 int main(int argc, char **argv) {
     time_t now, old;
     list_t *p, *p1;
-    const char *clean = DEFAULT_CLEAN_TARGET;
     char *args[3];
-    char *clean_args[3];
+    char **clean = NULL;
     int c;
     int output_phony = 0;
 
     /* A list of potential dependencies for each target. */
-    list_t *components = NULL;
+    list_t *dependencies = NULL;
 
     /* A list of targets to assess. */
     list_t *targets = NULL;
 
     /* Parse the command line arguments. */
-    while ((c = getopt(argc, argv, "t:c:ph")) != -1) {
+    while ((c = getopt(argc, argv, "c:t:d:ph")) != -1) {
         switch (c) {
-            case 't': { /* target */
+            case 'c': { /* clean action */
+                if (clean)
+                    DIE("Multiple clean actions specified.\n");
+                clean = split(optarg);
+                break;
+            } case 't': { /* target */
                 list_t *temp;
                 temp = (list_t*) malloc(sizeof(list_t));
                 temp->value = optarg;
                 temp->next = targets;
                 targets = temp;
                 break;
-            } case 'c': { /* component */
+            } case 'd': { /* potential dependency */
                 list_t *temp;
                 temp = (list_t*) malloc(sizeof(list_t));
                 temp->value = optarg;
-                temp->next = components;
-                components = temp;
+                temp->next = dependencies;
+                dependencies = temp;
                 break;
             } case 'h': { /* help */
                 printf("Usage: %s options\n"
-                    " -c component A file to consider as a potential dependency.\n"
+                    " -c clean     A custom command to clean (default \"make clean\").\n"
+                    " -d file      A file to consider as a potential dependency.\n"
                     " -h           Print usage information and exit.\n"
                     " -p           Include .PHONY target after assessing real ones.\n"
                     " -t target    A Makefile target to assess.\n",
@@ -169,7 +216,7 @@ int main(int argc, char **argv) {
                 output_phony = 1;
                 break;
             } case '?': { /* Unknown option. */
-                DIE("Unknown option %c.\n", c);
+                exit(1);
                 break;
             } default: { /* getopt failure */
                 DIE("Failed to parse command line arguments.\n");
@@ -182,32 +229,25 @@ int main(int argc, char **argv) {
         DIE("No targets specified.\n");
     }
 
-    if (!components) {
-        DIE("No components specified.\n");
+    if (!dependencies) {
+        DIE("No files specified.\n");
     }
 
     /* Setup clean arguments. */
-    /* TODO: Parameterise make so you can use a different build system. */
-    clean_args[0] = (char*) malloc(sizeof(char) * (strlen("make") + 1));
-    strcpy(clean_args[0], "make");
-    clean_args[1] = (char*)clean;
-    assert(strlen(clean) != 0);
-    clean_args[2] = NULL;
+    if (!clean)
+        clean = split(DEFAULT_CLEAN);
 
     /* Setup basic build arguments. */
-    args[0] = clean_args[0]; /* Cheat and reuse this because we know both
-                              * arrays will only ever be passed to const fns.
-                              */
+    args[0] = strdup("make");
     args[2] = NULL;
 
     /* Initial clean. */
-    assert(clean_args[2] == NULL);
-    if (run(clean_args)) {
+    if (run(clean)) {
         DIE("Error: Clean failed.\n");
     }
 
-    /* Check all the components we were passed actually exist. */
-    for (p1 = components; p1; p1 = p1->next) {
+    /* Check all the files we were passed actually exist. */
+    for (p1 = dependencies; p1; p1 = p1->next) {
         assert(p1->value);
         if (not_exists(p1->value)) {
             DIE("Component %s doesn't exist after cleaning. "
@@ -246,7 +286,7 @@ int main(int argc, char **argv) {
 
         /* Touch every component so we have a known starting point. */
         now = get_now((time_t)0);
-        for (p1 = components; p1; p1 = p1->next) {
+        for (p1 = dependencies; p1; p1 = p1->next) {
             assert(p1->value);
             switch (not_exists(p1->value)) {
                 case 0: { /* Component exists. */
@@ -269,7 +309,7 @@ int main(int argc, char **argv) {
         /* Touch the target to make sure it is considered up to date with
          * respect to all the potential dependencies. Note, this is here
          * because the target may not actually be in the user-provided list of
-         * components.
+         * files.
          */
         assert(!not_exists(p->value));
         if (touch(p->value, now)) {
@@ -283,7 +323,7 @@ int main(int argc, char **argv) {
 
         printf("%s:", p->value);
         old = now; /* The timestamp we've marked each file with. */
-        for (p1 = components; p1; p1 = p1->next) {
+        for (p1 = dependencies; p1; p1 = p1->next) {
             now = get_now(old);
             assert(p1->value);
             assert(now > old);
@@ -310,8 +350,7 @@ int main(int argc, char **argv) {
         printf("\n");
 
         /* Clean up. */
-        assert(clean_args[2] == NULL);
-        if (run(clean_args)) {
+        if (run(clean)) {
             DIE("Error: Clean failed.\n");
         }
     }
