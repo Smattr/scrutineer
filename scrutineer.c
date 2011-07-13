@@ -75,6 +75,7 @@ char **split(const char *s) {
             /* Only add this item if we've found something more than a single
              * space.
              */
+            /* TODO: Use a strndup implementation here for readability. */
             parts = (char**)realloc(parts, sizeof(char**) * (sz + 1));
             parts[sz] = (char*)malloc(sizeof(char) * (j - i + 1));
             strncpy(parts[sz], s + i, j - i);
