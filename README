@@ -21,7 +21,6 @@ in your Makefile are.
 If you find any bugs with this code or would like a feature implemented, please
 email me at matthew.fernandez@gmail.com or create an issue on github. My current
 to-do list is:
- - Allow passing command line options to make;
  - Options for specifying the working directory during build.
 
 A note to hackers: while exploring/using this project you may find yourself
