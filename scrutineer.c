@@ -34,6 +34,29 @@ typedef struct list {
     int phony; /* Whether this target is .PHONY or not. */
 } list_t;
 
+#ifndef _GNU_SOURCE
+/* If _GNU_SOURCE is defined then we will already have strndup from string.h.
+ */
+
+/* Copies at most n characters to a duplicate string. Result is '\0' terminated.
+ */
+char *strndup(const char *s, size_t n) {
+    char *p;
+    size_t i;
+
+    p = (char*)malloc(sizeof(char) * (n + 1));
+    for (i = 0; *s != '\0' && i != n; ++i, ++s)
+        p[i] = *s;
+    p[i] = '\0';
+
+    if (i != n)
+        /* We found a '\0' before the requested n characters. */
+        p = (char*)realloc(p, sizeof(char) * (i + 1));
+
+    return p;
+}
+#endif
+
 /* Sets the modified time of a file. Returns 0 on success or -1 on failure.
  */
 int touch(const char *path, const time_t timestamp) {
@@ -75,11 +98,8 @@ char **split(const char *s) {
             /* Only add this item if we've found something more than a single
              * space.
              */
-            /* TODO: Use a strndup implementation here for readability. */
             parts = (char**)realloc(parts, sizeof(char**) * (sz + 1));
-            parts[sz] = (char*)malloc(sizeof(char) * (j - i + 1));
-            strncpy(parts[sz], s + i, j - i);
-            parts[sz][j - i] = '\0';
+            parts[sz] = strndup(s + i, j - i);
             ++sz;
         }
 
