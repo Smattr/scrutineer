@@ -237,6 +237,7 @@ int main(int argc, char **argv) {
                 temp = (list_t*) malloc(sizeof(list_t));
                 temp->value = optarg;
                 temp->next = targets;
+                temp->phony = 0;
                 targets = temp;
                 break;
             } case 'd': { /* potential dependency */
@@ -244,6 +245,7 @@ int main(int argc, char **argv) {
                 temp = (list_t*) malloc(sizeof(list_t));
                 temp->value = optarg;
                 temp->next = dependencies;
+                /* ->phony is irrelevant for dependencies. */
                 dependencies = temp;
                 break;
             } case 'h': { /* help */
