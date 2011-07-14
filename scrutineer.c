@@ -27,6 +27,7 @@
     } while (0)
 
 #define DEFAULT_CLEAN "make clean"
+#define DEFAULT_BUILD "make"
 
 typedef struct list {
     const char *value;
@@ -147,7 +148,11 @@ int run(char *const argv[]) {
     pid_t proc;
 
 #ifndef NDEBUG
-    /* Check the arguments we're about to exec are NULL-terminated. */
+    /* Check the arguments we're about to exec are NULL-terminated. It's
+     * debatable how useful this check is as it should just crash out with a
+     * segfault, which is what execvp would have done anyway. At least we can
+     * ensure execvp doesn't even begin execution.
+     */
     int i = 0;
     while (argv[i++]);
 #endif
@@ -202,8 +207,9 @@ int run(char *const argv[]) {
 int main(int argc, char **argv) {
     time_t now, old;
     list_t *p, *p1;
-    char *args[3];
     char **clean = NULL;
+    char **build = NULL;
+    unsigned int target_arg;
     int c;
     int output_phony = 0;
 
@@ -214,9 +220,14 @@ int main(int argc, char **argv) {
     list_t *targets = NULL;
 
     /* Parse the command line arguments. */
-    while ((c = getopt(argc, argv, "c:t:d:ph")) != -1) {
+    while ((c = getopt(argc, argv, "b:c:t:d:ph")) != -1) {
         switch (c) {
-            case 'c': { /* clean action */
+            case 'b': { /* build action */
+                if (build)
+                    DIE("Multiple build actions specified.\n");
+                build = split(optarg);
+                break;
+            } case 'c': { /* clean action */
                 if (clean)
                     DIE("Multiple clean actions specified.\n");
                 clean = split(optarg);
@@ -237,6 +248,7 @@ int main(int argc, char **argv) {
                 break;
             } case 'h': { /* help */
                 printf("Usage: %s options\n"
+                    " -b build     A custom command to build (default \"make <target>\").\n"
                     " -c clean     A custom command to clean (default \"make clean\").\n"
                     " -d file      A file to consider as a potential dependency.\n"
                     " -h           Print usage information and exit.\n"
@@ -269,9 +281,15 @@ int main(int argc, char **argv) {
     if (!clean)
         clean = split(DEFAULT_CLEAN);
 
-    /* Setup basic build arguments. */
-    args[0] = strdup("make");
-    args[2] = NULL;
+    /* Setup build arguments. */
+    if (!build)
+        build = split(DEFAULT_BUILD);
+
+    /* Figure out where the "target" argument should go and make room for it. */
+    for (target_arg = 0; build[target_arg]; ++target_arg);
+    build = (char**)realloc(build, sizeof(char**) * (target_arg + 2));
+    build[target_arg + 1] = NULL;
+    /* Now build[target_arg] is the "target" argument's place. */
 
     /* Initial clean. */
     if (run(clean)) {
@@ -296,9 +314,8 @@ int main(int argc, char **argv) {
 
         /* Initial build to set the stage. */
         assert(p->value);
-        args[1] = (char*)p->value;
-        assert(args[2] == NULL);
-        if (run(args)) {
+        build[target_arg] = (char*)p->value;
+        if (run(build)) {
             fprintf(stderr,
                 "Warning: Failed to build %s from scratch. Broken %s recipe?\n",
                 p->value, p->value);
@@ -362,7 +379,7 @@ int main(int argc, char **argv) {
             assert(exists(p1->value));
             assert(get_mtime(p->value) == old);
             touch(p1->value, now);
-            if (run(args)) {
+            if (run(build)) {
                 DIE("Error: Failed to build %s after touching %s.\n", p->value,
                     p1->value);
             }
