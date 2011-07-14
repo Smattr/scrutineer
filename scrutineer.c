@@ -94,26 +94,54 @@ inline int exists(const char *path) {
 }
 
 /* Split a string into an array of words terminated by a null entry.
- * TODO: Cope with quoted strings as words.
  */
 char **split(const char *s) {
     unsigned int i, j;
     char **parts = NULL;
     unsigned int sz = 0;
 
+    /* Whether we're inside a singly-quoted string. */
+    int in_s_quote = 0;
+
+    /* Whether we're inside a doubly-quoted string. */
+    int in_d_quote = 0;
+
     for (i = 0, j = 0; s[i] != '\0'; ++i) {
 
         /* Find the next space or end of string. */
-        for (j = i; s[j] != '\0' && s[j] != ' '; ++j);
+        for (j = i; s[j] != '\0' &&
+                   (s[j] != ' ' || in_s_quote || in_d_quote); ++j) {
+            if (s[j] == '\'' && !in_d_quote)
+                in_s_quote = !in_s_quote;
+            else if (s[j] == '\"' && !in_s_quote)
+                in_d_quote = !in_d_quote;
+        }
+
+        if (s[i] == '\'' || s[i] == '\"')
+            /* Jump a leading quote. */
+            ++i;
 
         if (i != j) {
             /* Only add this item if we've found something more than a single
              * space.
              */
+
+            if (s[j - 1] == '\'' || s[j - 1] == '\"')
+                /* Drop a trailing quote. Note that this check is done after the
+                 * i != j check so that we know we're not reversing i and j in
+                 * the case of a trailing quote on a line. Also this has the
+                 * potentially unexpected behaviour of interpreting unclosed
+                 * quotes as closed by \0.
+                 */
+                --j;
+
             parts = (char**)realloc(parts, sizeof(char**) * (sz + 1));
             parts[sz] = strndup(s + i, j - i);
             ++sz;
         }
+
+        /* We may need to jump back over a quote that we skipped. */
+        if (s[j] == '\"' || s[j] == '\'') ++j;
 
         /* If we're at the end of the string setting i=j will cause a buffer
          * overflow in the next iteration of the loop.
