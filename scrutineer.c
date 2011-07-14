@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
     list_t *targets = NULL;
 
     /* Parse the command line arguments. */
-    while ((c = getopt(argc, argv, "b:c:t:d:ph")) != -1) {
+    while ((c = getopt(argc, argv, "b:c:t:d:phw:")) != -1) {
         switch (c) {
             case 'b': { /* build action */
                 if (build)
@@ -253,7 +253,8 @@ int main(int argc, char **argv) {
                     " -d file      A file to consider as a potential dependency.\n"
                     " -h           Print usage information and exit.\n"
                     " -p           Include .PHONY target after assessing real ones.\n"
-                    " -t target    A Makefile target to assess.\n",
+                    " -t target    A Makefile target to assess.\n"
+                    " -w directory Set the working directory before building.\n",
                     argv[0]);
                 return 0;
             } case 'p': { /* output PHONY rule. */
@@ -262,6 +263,9 @@ int main(int argc, char **argv) {
             } case '?': { /* Unknown option. */
                 exit(1);
                 break;
+            } case 'w': { /* Change working directory. */
+                if (chdir(optarg))
+                    DIE("Failed to change directory to %s.\n", optarg);
             } default: { /* getopt failure */
                 DIE("Failed to parse command line arguments.\n");
                 break;
