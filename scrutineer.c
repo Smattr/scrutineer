@@ -76,9 +76,9 @@ time_t get_mtime(const char *path) {
     return ret ? (time_t)0 : buf.st_mtime;
 }
 
-/* Returns 1 if a file does not exist and 0 otherwise. */
-inline int not_exists(const char *path) {
-    return access(path, F_OK) ? errno : 0;
+/* Returns 1 if a file exists and 0 otherwise. */
+inline int exists(const char *path) {
+    return !access(path, F_OK);
 }
 
 /* Split a string into an array of words terminated by a null entry.
@@ -270,7 +270,7 @@ int main(int argc, char **argv) {
     /* Check all the files we were passed actually exist. */
     for (p1 = dependencies; p1; p1 = p1->next) {
         assert(p1->value);
-        if (not_exists(p1->value)) {
+        if (!exists(p1->value)) {
             DIE("Component %s doesn't exist after cleaning. "
                 "Is it an intermediate file?\n", p1->value);
         }
@@ -297,7 +297,7 @@ int main(int argc, char **argv) {
         /* We shouldn't know whether this target is phony yet. */
         assert(!p->phony);
 
-        if (not_exists(p->value)) {
+        if (!exists(p->value)) {
             fprintf(stderr,
                 "Warning: %s appears to be PHONY! I can't assess this.\n",
                 p->value);
@@ -309,7 +309,7 @@ int main(int argc, char **argv) {
         now = get_now((time_t)0);
         for (p1 = dependencies; p1; p1 = p1->next) {
             assert(p1->value);
-            switch (not_exists(p1->value)) {
+            switch (!exists(p1->value)) {
                 case 0: { /* Component exists. */
                     if (touch(p1->value, now)) {
                         DIE("Could not update timestamp for %s.\n", p1->value);
@@ -332,7 +332,7 @@ int main(int argc, char **argv) {
          * because the target may not actually be in the user-provided list of
          * files.
          */
-        assert(!not_exists(p->value));
+        assert(exists(p->value));
         if (touch(p->value, now)) {
             fprintf(stderr, "Could not update timestamp for %s (cannot "
                 "determine dependencies).\n", p->value);
@@ -348,14 +348,14 @@ int main(int argc, char **argv) {
             now = get_now(old);
             assert(p1->value);
             assert(now > old);
-            assert(!not_exists(p1->value));
+            assert(exists(p1->value));
             assert(get_mtime(p->value) == old);
             touch(p1->value, now);
             if (run(args)) {
                 DIE("Error: Failed to build %s after touching %s.\n", p->value,
                     p1->value);
             }
-            if (not_exists(p->value)) {
+            if (!exists(p->value)) {
                 DIE("Error: %s, that was NOT a phony target, was removed when "
                     "building after touching %s. Broken recipe for %s?\n",
                     p->value, p1->value, p->value);
