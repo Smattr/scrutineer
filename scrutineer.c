@@ -34,6 +34,17 @@ typedef struct list {
     int phony; /* Whether this target is .PHONY or not. */
 } list_t;
 
+#ifdef __GNUC__
+    /* If we're using GCC, there are some annotations we can pass the compiler
+     * to help it optimise.
+     */
+    #ifndef _GNU_SOURCE
+    /* See comment about _GNU_SOURCE below. */
+    char *strndup(const char *s, size_t n) __attribute__((pure));
+    #endif
+    char **split(const char *s) __attribute__((pure));
+#endif
+
 #ifndef _GNU_SOURCE
 /* If _GNU_SOURCE is defined then we will already have strndup from string.h.
  */
