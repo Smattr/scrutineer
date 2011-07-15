@@ -165,9 +165,7 @@ char **split(const char *s) {
  */
 time_t get_now(time_t not) {
     time_t ret;
-    while ((ret = time(NULL)) <= not) {
-        usleep(100);
-    }
+    while ((ret = time(NULL)) <= not) usleep(100);
     return ret;
 }
 
@@ -225,10 +223,9 @@ int run(char *const argv[]) {
                 break;
             }
         }
-    } else {
+    } else
         /* Fork failed. */
         return errno;
-    }
 }
 
 
@@ -303,13 +300,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!targets) {
+    if (!targets)
         DIE("No targets specified.\n");
-    }
 
-    if (!dependencies) {
+    if (!dependencies)
         DIE("No files specified.\n");
-    }
 
     /* Setup clean arguments. */
     if (!clean)
@@ -326,17 +321,15 @@ int main(int argc, char **argv) {
     /* Now build[target_arg] is the "target" argument's place. */
 
     /* Initial clean. */
-    if (run(clean)) {
+    if (run(clean))
         DIE("Error: Clean failed.\n");
-    }
 
     /* Check all the files we were passed actually exist. */
     for (p1 = dependencies; p1; p1 = p1->next) {
         assert(p1->value);
-        if (!exists(p1->value)) {
+        if (!exists(p1->value))
             DIE("Component %s doesn't exist after cleaning. "
                 "Is it an intermediate file?\n", p1->value);
-        }
     }
 
     /* Build each target multiple times (touching different files in between)
@@ -371,22 +364,14 @@ int main(int argc, char **argv) {
         now = get_now((time_t)0);
         for (p1 = dependencies; p1; p1 = p1->next) {
             assert(p1->value);
-            switch (!exists(p1->value)) {
-                case 0: { /* Component exists. */
-                    if (touch(p1->value, now)) {
-                        DIE("Could not update timestamp for %s.\n", p1->value);
-                    }
-                    break;
-                } case ENOENT: { /* Component doesn't exist. */
-                    fprintf(stderr, "Warning: component %s now doesn't exist, "
+            if (exists(p1->value)) {
+                if (touch(p1->value, now))
+                    DIE("Could not update timestamp for %s.\n", p1->value);
+            } else
+                fprintf(stderr, "Warning: component %s now doesn't exist, "
                         "although cleaning does not seem to delete it. "
                         "Destructive recipe somewhere in your Makefile?\n",
                         p1->value);
-                    break;
-                } default: { /* Some other access issue. */
-                    DIE("Could not determine access rights for %s.\n", p1->value);
-                }
-            }
         }
 
         /* Touch the target to make sure it is considered up to date with
@@ -413,15 +398,16 @@ int main(int argc, char **argv) {
             assert(exists(p1->value));
             assert(get_mtime(p->value) == old);
             touch(p1->value, now);
-            if (run(build)) {
+
+            if (run(build))
                 DIE("Error: Failed to build %s after touching %s.\n", p->value,
                     p1->value);
-            }
-            if (!exists(p->value)) {
+
+            if (!exists(p->value))
                 DIE("Error: %s, that was NOT a phony target, was removed when "
                     "building after touching %s. Broken recipe for %s?\n",
                     p->value, p1->value, p->value);
-            }
+
             now = get_mtime(p->value);
             assert(now >= old); /* Check we haven't gone back in time. */
             if (now != old) {
@@ -433,15 +419,14 @@ int main(int argc, char **argv) {
         printf("\n");
 
         /* Clean up. */
-        if (run(clean)) {
+        if (run(clean))
             DIE("Error: Clean failed.\n");
-        }
     }
 
     if (output_phony) {
         int marker;
 
-        for (marker = 0, p = targets; p; p = p->next) {
+        for (marker = 0, p = targets; p; p = p->next)
             if (p->phony) {
                 if (!marker) {
                     printf(".PHONY:");
@@ -449,7 +434,6 @@ int main(int argc, char **argv) {
                 }
                 printf(" %s", p->value);
             }
-        }
         /* If we found at least one phony target. */
         if (marker) printf("\n");
     }
